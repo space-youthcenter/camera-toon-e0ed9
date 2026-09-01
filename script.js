@@ -26,6 +26,7 @@
   var running = false;
   var animationId = 0;
   var resizeTimer = 0;
+  var aiEnabled = false;
   var lowCanvas = document.createElement("canvas");
   var lowCtx = lowCanvas.getContext("2d", { willReadFrequently: true }) || lowCanvas.getContext("2d");
   var capturedCanvas = document.createElement("canvas");
@@ -35,6 +36,7 @@
 
   frameImage.onload = function () { frameReady = true; };
   frameImage.onerror = function () { frameReady = false; };
+  detectAIMode();
 
   startButton.addEventListener("click", function () { startCamera(); });
   flipButton.addEventListener("click", function () {
@@ -449,20 +451,23 @@
     cropCanvas.height = Math.max(2, Math.round(screen.h * cropScale));
     cropCtx.drawImage(capturedCanvas, screen.x, screen.y, screen.w, screen.h, 0, 0, cropCanvas.width, cropCanvas.height);
 
-    showStatus("AI가 색연필 그림을 그리고 있어요…");
+    showStatus(aiEnabled ? "AI가 색연필 그림을 그리고 있어요…" : "기기 안에서 색연필 그림을 그리고 있어요…");
     setTimeout(function () {
-      createAIResult(frame, screen);
+      createResult(frame, screen);
     }, 30);
   }
 
-  async function createAIResult(frame, screen) {
+  async function createResult(frame, screen) {
     var transformed;
-    var usedFallback = false;
-    try {
-      transformed = await transformWithAI(cropCanvas);
-    } catch (error) {
+    if (aiEnabled) {
+      try {
+        transformed = await transformWithAI(cropCanvas);
+      } catch (error) {
+        aiEnabled = false;
+        transformed = createCanvasFallback(cropCanvas);
+      }
+    } else {
       transformed = createCanvasFallback(cropCanvas);
-      usedFallback = true;
     }
 
     resultCtx.drawImage(capturedCanvas, 0, 0, resultCanvas.width, resultCanvas.height);
@@ -472,7 +477,27 @@
     resultSheet.setAttribute("aria-hidden", "false");
     hideStatus();
     shutterButton.disabled = false;
-    if (usedFallback) showToast("AI 연결이 어려워 기기 안의 Paper Toon 효과를 사용했어요.");
+  }
+
+  // 무료 모드가 기본입니다. 서버가 AI 키 설정을 명시적으로 알려줄 때만 사진 crop을 전송합니다.
+  async function detectAIMode() {
+    if (location.protocol === "file:") return;
+    var controller = typeof AbortController !== "undefined" ? new AbortController() : null;
+    var timer = setTimeout(function () { if (controller) controller.abort(); }, 2500);
+    try {
+      var response = await fetch("/api/ai-status", {
+        method: "GET",
+        cache: "no-store",
+        signal: controller ? controller.signal : undefined
+      });
+      if (!response.ok) return;
+      var payload = await response.json();
+      aiEnabled = payload && payload.enabled === true;
+    } catch (error) {
+      aiEnabled = false;
+    } finally {
+      clearTimeout(timer);
+    }
   }
 
   // 이미지 제공자를 바꿀 때 이 함수의 내부 구현만 교체하면 됩니다.
@@ -497,7 +522,50 @@
     var pixels = lowCtx.getImageData(0, 0, lowCanvas.width, lowCanvas.height);
     applyPencilSketch(pixels, lowCanvas.width, lowCanvas.height);
     lowCtx.putImageData(pixels, 0, 0);
+    addPencilTexture(lowCtx, lowCanvas.width, lowCanvas.height);
     return lowCanvas;
+  }
+
+  function addPencilTexture(context, width, height) {
+    var unit = Math.max(1, Math.round(Math.min(width, height) / 520));
+    context.save();
+
+    // 종이 섬유와 밝은 빈틈을 얹어 색이 디지털 페인트처럼 꽉 차 보이지 않게 합니다.
+    context.globalCompositeOperation = "screen";
+    context.strokeStyle = "rgba(255,250,232,.2)";
+    context.lineWidth = unit;
+    for (var fiber = -height; fiber < width + height; fiber += unit * 13) {
+      context.beginPath();
+      context.moveTo(fiber, 0);
+      context.lineTo(fiber - height * .42, height);
+      context.stroke();
+    }
+
+    // 짧고 끊어진 두 방향의 선으로 색연필 해칭을 강화합니다.
+    context.globalCompositeOperation = "multiply";
+    context.lineCap = "round";
+    for (var y = unit * 4; y < height; y += unit * 9) {
+      for (var x = (y * 7) % (unit * 19); x < width; x += unit * 23) {
+        var tone = ((x * 17 + y * 11) % 29) / 29;
+        context.strokeStyle = "rgba(72,55,43," + (.035 + tone * .055) + ")";
+        context.lineWidth = unit * (.6 + tone * .55);
+        context.beginPath();
+        context.moveTo(x, y + ((x + y) % (unit * 3)));
+        context.lineTo(Math.min(width, x + unit * (7 + tone * 6)), Math.max(0, y - unit * (3 + tone * 3)));
+        context.stroke();
+      }
+    }
+
+    // 작은 종이 알갱이는 고정 좌표를 사용해 결과가 매번 안정적으로 보이게 합니다.
+    context.globalCompositeOperation = "source-over";
+    for (var dot = 0; dot < Math.min(2600, Math.round(width * height / 520)); dot++) {
+      var px = (dot * 97 + dot * dot * 13) % width;
+      var py = (dot * 53 + dot * dot * 7) % height;
+      var light = dot % 3 === 0;
+      context.fillStyle = light ? "rgba(255,252,238,.16)" : "rgba(63,47,37,.075)";
+      context.fillRect(px, py, unit, unit);
+    }
+    context.restore();
   }
 
   function canvasToBlob(sourceCanvas, type, quality) {
