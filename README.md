@@ -4,6 +4,8 @@
 
 **웹앱 실행:** https://space-youthcenter.github.io/camera-toon/
 
+**Netlify 실행:** https://glittery-caramel-9ffb9a.netlify.app/
+
 ## 특징
 
 - 앱을 열면 카메라 권한을 요청하고 실시간 미리보기를 시작합니다.
@@ -14,6 +16,8 @@
 - OpenAI API 변환은 선택 기능이며, 서버에 API 키가 설정된 경우에만 촬영한 내부 화면 crop을 전송합니다.
 - 별도의 빌드 과정이 필요 없습니다.
 - iPhone Safari를 포함한 모바일 화면에 맞춰져 있습니다.
+- 세로·가로 전환 시 프레임, 내부 화면창, 촬영 crop 및 저장 이미지 좌표를 다시 계산합니다.
+- 가능한 경우 광각 후면 카메라를 우선 선택하며, 렌즈 전환 버튼과 줌 슬라이더를 제공합니다.
 - `assets/frame-camera.png`가 없으면 임시 종이 카메라 프레임을 자동으로 그립니다.
 
 ## 기본 무료 모드와 선택형 AI 변환
@@ -21,6 +25,8 @@
 Camera Toon의 기본 모드는 무료입니다. 촬영 후 종이 카메라 안쪽 영역에 검은 펜선, 거친 색연필 해칭, 종이결과 불균일한 채색을 브라우저 canvas로 적용합니다. 사진은 기기 밖으로 전송되지 않습니다.
 
 OpenAI AI 변환은 선택 기능입니다. Netlify 서버에 `OPENAI_API_KEY`가 설정된 경우에만 촬영된 전체 사진이 아닌 종이 카메라 내부 화면 crop을 함수로 전송합니다. AI 설정이 없거나 호출이 실패하면 오류 메시지를 반복해서 띄우지 않고 무료 Paper Toon 필터를 사용합니다.
+
+촬영 전 미리보기에는 보정을 적용하지 않습니다. 촬영 버튼을 누른 뒤에만 내부 화면 영역을 변환하며, 프레임 바깥은 촬영 당시의 원본을 그대로 유지합니다. 중복 촬영은 변환이 끝날 때까지 차단됩니다.
 
 API 키는 브라우저 코드나 GitHub 저장소에 넣지 않습니다.
 
@@ -63,6 +69,14 @@ AI 변환을 사용하지 않는다면 아래 환경 변수 단계는 건너뛰�
 
 AI 변환이 실패하면 결과는 자동으로 **브라우저 Paper Toon** fallback으로 생성됩니다. 이때 Netlify의 **Logs → Functions → transform-image** 로그에서 API 키, 결제 한도, 모델 접근 권한 또는 요청 오류를 확인할 수 있습니다.
 
+## 카메라 렌즈와 줌
+
+- 첫 실행 후 `enumerateDevices()`로 사용할 수 있는 비디오 입력을 확인합니다.
+- 이름을 확인할 수 있으면 초광각·광각·후면 카메라 순서로 우선합니다. iPhone Safari에서 렌즈 이름이 숨겨지거나 불명확하면 우측 상단 렌즈 전환 버튼으로 후보를 순서대로 바꿀 수 있습니다.
+- 브라우저가 카메라 `zoom` constraint를 지원하면 실제 렌즈 줌을 적용합니다.
+- 지원하지 않으면 캔버스 중앙 crop을 이용한 디지털 줌으로 대체합니다.
+- 실제 0.5× 화각은 기기가 초광각 렌즈를 웹 브라우저에 별도 카메라로 제공할 때만 선택할 수 있습니다.
+
 ## GitHub Pages 배포
 
 이 저장소의 `main` 브랜치에 파일을 올리면 GitHub Actions가 자동으로 배포합니다.
@@ -73,8 +87,8 @@ AI 변환이 실패하면 결과는 자동으로 **브라우저 Paper Toon** fal
 
 `https://GITHUB-USERNAME.github.io/camera-toon/`
 
-현재 주소 `https://space-youthcenter.github.io/camera-toon/`에서는 OpenAI AI 변환이 작동하지 않습니다. 이 주소는 카메라 권한, 화면 방향 전환, 촬영, 저장 및 브라우저 fallback 테스트용으로 계속 사용할 수 있습니다. AI 변환 여부는 반드시 Netlify의 `*.netlify.app` 주소에서 확인하세요.
+현재 주소 `https://space-youthcenter.github.io/camera-toon/`에서는 OpenAI AI 변환이 작동하지 않고 무료 Paper Toon fallback만 작동합니다. 이 주소는 카메라 권한, 렌즈 전환, 줌, 화면 방향 전환, 촬영 및 저장 테스트용으로 사용할 수 있습니다. OpenAI AI 변환은 Netlify의 `https://glittery-caramel-9ffb9a.netlify.app/`에서만 사용할 수 있습니다.
 
 ## 실제 카메라 프레임 사용
 
-투명 PNG 프레임을 `assets/frame-camera.png`에 넣으세요. 화면 구멍의 위치가 다르면 `script.js`의 `getScreenRect()` 비율을 조정하면 됩니다.
+투명 PNG 프레임을 `assets/frame-camera.png`에 넣으세요. 이미지가 없으면 크림색 종이 질감, 불규칙한 검은 외곽선, 셔터·플래시·하트·MENU·OK 장식이 있는 캔버스 종이공작 프레임이 표시됩니다. 화면 구멍의 위치가 다르면 `script.js`의 `getScreenRect()` 비율을 조정하면 됩니다.
