@@ -4,6 +4,9 @@
   var video = document.getElementById("cameraVideo");
   var canvas = document.getElementById("liveCanvas");
   var ctx = canvas.getContext("2d", { willReadFrequently: true, alpha: false }) || canvas.getContext("2d");
+  var frozenCanvas = document.getElementById("frozenCanvas");
+  var frozenCtx = frozenCanvas.getContext("2d", { alpha: false }) || frozenCanvas.getContext("2d");
+  var stage = document.getElementById("stage");
   var resultCanvas = document.getElementById("resultCanvas");
   var resultCtx = resultCanvas.getContext("2d", { alpha: false }) || resultCanvas.getContext("2d");
   var frameImage = document.getElementById("frameImage");
@@ -22,6 +25,10 @@
   var zoomControl = document.getElementById("zoomControl");
   var zoomRange = document.getElementById("zoomRange");
   var zoomLabel = document.getElementById("zoomLabel");
+  var modeButton = document.getElementById("modeButton");
+  var modeName = document.getElementById("modeName");
+  var connectionStatus = document.getElementById("connectionStatus");
+  var resultMode = document.getElementById("resultMode");
 
   var stream = null;
   var facingMode = "environment";
@@ -30,12 +37,15 @@
   var animationId = 0;
   var resizeTimer = 0;
   var aiEnabled = false;
+  var aiCheckPending = true;
+  var selectedMode = "ai";
   var cameraDevices = [];
   var selectedDeviceId = "";
   var activeTrack = null;
   var nativeZoom = false;
   var digitalZoom = 1;
   var autoSelectedWide = false;
+  var processingCapture = false;
   var lowCanvas = document.createElement("canvas");
   var lowCtx = lowCanvas.getContext("2d", { willReadFrequently: true }) || lowCanvas.getContext("2d");
   var capturedCanvas = document.createElement("canvas");
@@ -51,6 +61,7 @@
   flipButton.addEventListener("click", cycleCamera);
   zoomRange.addEventListener("input", applyZoom);
   shutterButton.addEventListener("click", capturePhoto);
+  modeButton.addEventListener("click", toggleProcessingMode);
   closeResult.addEventListener("click", closeResultSheet);
   retakeButton.addEventListener("click", closeResultSheet);
   saveButton.addEventListener("click", savePhoto);
@@ -63,11 +74,11 @@
   window.addEventListener("pagehide", stopCamera);
   document.addEventListener("visibilitychange", function () {
     if (document.hidden) cancelAnimationFrame(animationId);
-    else if (running) animationId = requestAnimationFrame(renderLoop);
+    else if (running && !processingCapture) animationId = requestAnimationFrame(renderLoop);
   });
 
   async function startCamera(deviceId) {
-    if (!ctx || !resultCtx || !lowCtx || !capturedCtx || !cropCtx) {
+    if (!ctx || !frozenCtx || !resultCtx || !lowCtx || !capturedCtx || !cropCtx) {
       showError("이 기기에서 카메라 화면을 준비하지 못했어요. Safari를 완전히 닫았다가 다시 열어 주세요.");
       return;
     }
@@ -163,6 +174,7 @@
   }
 
   function cycleCamera() {
+    if (processingCapture) return;
     if (cameraDevices.length > 1) {
       var current = cameraDevices.findIndex(function (device) { return device.deviceId === selectedDeviceId; });
       var next = cameraDevices[(current + 1 + cameraDevices.length) % cameraDevices.length];
@@ -197,6 +209,7 @@
   }
 
   function applyZoom() {
+    if (processingCapture) return;
     var value = Number(zoomRange.value) || 1;
     if (nativeZoom && activeTrack && activeTrack.applyConstraints) {
       activeTrack.applyConstraints({ advanced: [{ zoom: value }] }).catch(function () {
@@ -219,18 +232,22 @@
     var cssHeight = Math.max(1, document.documentElement.clientHeight || window.innerHeight);
     canvas.width = Math.round(cssWidth * ratio);
     canvas.height = Math.round(cssHeight * ratio);
+    if (!processingCapture) {
+      frozenCanvas.width = canvas.width;
+      frozenCanvas.height = canvas.height;
+    }
   }
 
   function scheduleResize(delay) {
     clearTimeout(resizeTimer);
     resizeTimer = setTimeout(function () {
       resizeCanvas();
-      if (running && video.readyState >= 2) drawScene(ctx, canvas.width, canvas.height);
+      if (running && !processingCapture && video.readyState >= 2) drawScene(ctx, canvas.width, canvas.height);
     }, delay || 80);
   }
 
   function renderLoop(time) {
-    if (!running) return;
+    if (!running || processingCapture) return;
     drawScene(ctx, canvas.width, canvas.height);
     animationId = requestAnimationFrame(renderLoop);
   }
@@ -577,8 +594,10 @@
   }
 
   function capturePhoto() {
-    if (!running || video.readyState < 2) return;
-    shutterButton.disabled = true;
+    if (!running || processingCapture || video.readyState < 2) return;
+    processingCapture = true;
+    setCaptureControlsDisabled(true);
+    cancelAnimationFrame(animationId);
     var maxSide = 1800;
     // 카메라 센서의 고정 방향이 아니라 현재 보이는 캔버스 비율로 결과를 만듭니다.
     var scale = Math.min(1, maxSide / Math.max(canvas.width, canvas.height));
@@ -590,12 +609,21 @@
 
     var frame = getFrameRect(resultCanvas.width, resultCanvas.height);
     var screen = getScreenRect(frame);
-    var cropScale = Math.min(1, 1200 / Math.max(screen.w, screen.h));
+    var cropScale = Math.min(1, 1024 / Math.max(screen.w, screen.h));
     cropCanvas.width = Math.max(2, Math.round(screen.w * cropScale));
     cropCanvas.height = Math.max(2, Math.round(screen.h * cropScale));
     cropCtx.drawImage(capturedCanvas, screen.x, screen.y, screen.w, screen.h, 0, 0, cropCanvas.width, cropCanvas.height);
 
-    showStatus("손그림 변환 중…");
+    // 셔터 순간 확정된 이 한 장만 화면에 고정하고 API crop에도 재사용합니다.
+    frozenCanvas.width = canvas.width;
+    frozenCanvas.height = canvas.height;
+    frozenCtx.drawImage(capturedCanvas, 0, 0, frozenCanvas.width, frozenCanvas.height);
+    var frozenFrame = getFrameRect(frozenCanvas.width, frozenCanvas.height);
+    var frozenScreen = getScreenRect(frozenFrame);
+    drawPaperFrame(frozenCtx, frozenFrame, frozenScreen, null, frozenCanvas.width, frozenCanvas.height, cropCanvas);
+    stage.classList.add("is-frozen");
+
+    showProcessingStatus();
     setTimeout(function () {
       createResult(frame, screen);
     }, 30);
@@ -604,31 +632,49 @@
   async function createResult(frame, screen) {
     var transformed;
     var aiFailed = false;
-    if (aiEnabled) {
-      try {
-        transformed = await transformWithAI(cropCanvas);
-      } catch (error) {
-        aiEnabled = false;
-        aiFailed = true;
+    var usedAI = false;
+    try {
+      if (selectedMode === "ai" && aiEnabled) {
+        try {
+          transformed = await transformWithAI(cropCanvas);
+          usedAI = true;
+        } catch (error) {
+          aiEnabled = false;
+          selectedMode = "basic";
+          aiFailed = true;
+          updateModeDisplay();
+          transformed = createCanvasFallback(cropCanvas);
+        }
+      } else {
         transformed = createCanvasFallback(cropCanvas);
       }
-    } else {
-      transformed = createCanvasFallback(cropCanvas);
-    }
 
-    resultCtx.drawImage(capturedCanvas, 0, 0, resultCanvas.width, resultCanvas.height);
-    resultCtx.drawImage(transformed, screen.x, screen.y, screen.w, screen.h);
-    drawPaperFrame(resultCtx, frame, screen, null, resultCanvas.width, resultCanvas.height, transformed);
-    resultSheet.classList.add("open");
-    resultSheet.setAttribute("aria-hidden", "false");
-    hideStatus();
-    shutterButton.disabled = false;
-    if (aiFailed) showToast("AI 변환에 실패해서 기본 효과로 저장했어요.");
+      resultCtx.drawImage(capturedCanvas, 0, 0, resultCanvas.width, resultCanvas.height);
+      resultCtx.drawImage(transformed, screen.x, screen.y, screen.w, screen.h);
+      drawPaperFrame(resultCtx, frame, screen, null, resultCanvas.width, resultCanvas.height, transformed);
+      resultMode.textContent = usedAI ? "AI 손그림 변환 완료" : "기본 손그림 효과로 변환했어요";
+      resultSheet.classList.add("open");
+      resultSheet.setAttribute("aria-hidden", "false");
+      if (aiFailed) showToast("AI 변환에 실패해서 기본 효과로 저장했어요.");
+    } catch (error) {
+      showToast("결과를 만들지 못했어요. 다시 촬영해 주세요.");
+      stage.classList.remove("is-frozen");
+      if (running) animationId = requestAnimationFrame(renderLoop);
+    } finally {
+      hideStatus();
+      processingCapture = false;
+      setCaptureControlsDisabled(false);
+    }
   }
 
   // 무료 모드가 기본입니다. 서버가 AI 키 설정을 명시적으로 알려줄 때만 사진 crop을 전송합니다.
   async function detectAIMode() {
-    if (location.protocol === "file:") return;
+    aiCheckPending = true;
+    updateModeDisplay();
+    if (location.protocol === "file:") {
+      finishAICheck(false);
+      return;
+    }
     var controller = typeof AbortController !== "undefined" ? new AbortController() : null;
     var timer = setTimeout(function () { if (controller) controller.abort(); }, 2500);
     try {
@@ -637,14 +683,58 @@
         cache: "no-store",
         signal: controller ? controller.signal : undefined
       });
-      if (!response.ok) return;
+      if (!response.ok) {
+        finishAICheck(false);
+        return;
+      }
       var payload = await response.json();
-      aiEnabled = payload && payload.enabled === true;
+      finishAICheck(payload && payload.enabled === true);
     } catch (error) {
-      aiEnabled = false;
+      finishAICheck(false);
     } finally {
       clearTimeout(timer);
     }
+  }
+
+  function finishAICheck(enabled) {
+    aiEnabled = enabled === true;
+    aiCheckPending = false;
+    if (!aiEnabled) selectedMode = "basic";
+    updateModeDisplay();
+  }
+
+  function toggleProcessingMode() {
+    if (processingCapture || aiCheckPending) return;
+    if (selectedMode === "ai") {
+      selectedMode = "basic";
+      updateModeDisplay();
+      showToast("기본 모드로 촬영해요.");
+      return;
+    }
+    if (!aiEnabled) {
+      showToast("이 환경에서는 AI를 사용할 수 없어 기본 모드로 촬영해요.");
+      return;
+    }
+    selectedMode = "ai";
+    updateModeDisplay();
+    showToast("AI 손그림 모드로 촬영해요.");
+  }
+
+  function updateModeDisplay() {
+    modeButton.classList.toggle("checking", aiCheckPending);
+    modeButton.classList.toggle("basic", !aiCheckPending && selectedMode === "basic");
+    if (aiCheckPending) {
+      modeName.textContent = "AI 손그림";
+      connectionStatus.textContent = "AI 확인 중...";
+      return;
+    }
+    if (selectedMode === "ai" && aiEnabled) {
+      modeName.textContent = "AI 손그림";
+      connectionStatus.textContent = "AI 연결됨";
+      return;
+    }
+    modeName.textContent = "기본 모드";
+    connectionStatus.textContent = aiEnabled ? "AI 연결됨 · 전환 가능" : "기본 모드";
   }
 
   // 이미지 제공자를 바꿀 때 이 함수의 내부 구현만 교체하면 됩니다.
@@ -752,6 +842,11 @@
   function closeResultSheet() {
     resultSheet.classList.remove("open");
     resultSheet.setAttribute("aria-hidden", "true");
+    stage.classList.remove("is-frozen");
+    if (running && !processingCapture) {
+      cancelAnimationFrame(animationId);
+      animationId = requestAnimationFrame(renderLoop);
+    }
   }
 
   function savePhoto() {
@@ -789,8 +884,18 @@
 
   function quantize(value, step) { return clamp(Math.round(clamp(value) / step) * step); }
   function clamp(value) { return Math.max(0, Math.min(255, value)); }
-  function showStatus(message) { status.textContent = message; status.classList.add("show"); }
-  function hideStatus() { status.classList.remove("show"); }
+  function setCaptureControlsDisabled(disabled) {
+    shutterButton.disabled = disabled;
+    flipButton.disabled = disabled;
+    zoomRange.disabled = disabled;
+    modeButton.disabled = disabled;
+  }
+  function showStatus(message) { status.classList.remove("processing"); status.textContent = message; status.classList.add("show"); }
+  function showProcessingStatus() {
+    status.classList.add("processing", "show");
+    status.innerHTML = '<i class="spinner" aria-hidden="true"></i><strong>손그림으로 바꾸는 중...</strong><small>사진 촬영은 완료됐어요.</small>';
+  }
+  function hideStatus() { status.classList.remove("show", "processing"); }
   function showError(message) { hideStatus(); permissionMessage.textContent = message; startButton.textContent = "다시 시도"; permissionPanel.classList.remove("hidden"); }
   var toastTimer;
   function showToast(message) { toast.textContent = message; toast.classList.add("show"); clearTimeout(toastTimer); toastTimer = setTimeout(function () { toast.classList.remove("show"); }, 2500); }
