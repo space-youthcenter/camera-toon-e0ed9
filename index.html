@@ -8,19 +8,23 @@
     <meta http-equiv="Pragma" content="no-cache" />
     <meta name="description" content="종이 카메라로 찍으면 화면 속만 색연필 그림이 되는 놀이 카메라" />
     <title>Camera Toon</title>
-    <link rel="stylesheet" href="style.css?v=11" />
+    <link rel="stylesheet" href="style.css?v=14" />
   </head>
   <body>
     <main class="camera-app">
       <header class="topbar">
         <div class="brand"><b>Camera</b> <em>Toon</em></div>
-        <div class="live-badge"><i></i> LIVE</div>
+        <button id="modeButton" class="mode-button checking" type="button" aria-label="촬영 처리 모드 변경">
+          <strong id="modeName">AI 손그림</strong>
+          <small id="connectionStatus">AI 확인 중...</small>
+        </button>
         <button id="flipButton" class="icon-button" type="button" aria-label="다른 카메라 렌즈로 전환" hidden>↻</button>
       </header>
 
       <section id="stage" class="stage" aria-label="실시간 카메라 미리보기">
         <video id="cameraVideo" autoplay muted playsinline></video>
         <canvas id="liveCanvas"></canvas>
+        <canvas id="frozenCanvas" aria-label="촬영이 완료된 정지 이미지"></canvas>
 
         <div id="permissionPanel" class="permission-panel">
           <div class="paper-camera-icon" aria-hidden="true"><i></i></div>
@@ -49,6 +53,7 @@
       <div class="sheet-card">
         <header><strong>찰칵! Camera Toon 완성</strong><button id="closeResult" type="button" aria-label="결과 닫기">×</button></header>
         <canvas id="resultCanvas"></canvas>
+        <p id="resultMode" class="result-mode" role="status"></p>
         <div class="result-actions">
           <button id="retakeButton" class="secondary-button" type="button">다시 찍기</button>
           <button id="saveButton" class="save-button" type="button">↓ 사진 저장</button>
@@ -59,6 +64,6 @@
 
     <div id="toast" class="toast" role="status" aria-live="polite"></div>
     <img id="frameImage" src="assets/frame-camera.png" alt="" hidden />
-    <script src="script.js?v=11"></script>
+    <script src="script.js?v=14"></script>
   </body>
 </html>
