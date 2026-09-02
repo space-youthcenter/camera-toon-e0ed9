@@ -12,13 +12,12 @@ html, body { width: 100%; min-height: 100%; margin: 0; background: var(--dark); 
 body { color: var(--paper); font-family: "Arial Rounded MT Bold", "Apple SD Gothic Neo", system-ui, sans-serif; -webkit-tap-highlight-color: transparent; }
 button { font: inherit; color: inherit; touch-action: manipulation; }
 .camera-app { position: fixed; inset: 0; min-height: 100dvh; background: #171614; }
-.topbar { position: absolute; z-index: 12; top: 0; left: 0; right: 0; height: calc(72px + env(safe-area-inset-top)); padding: calc(10px + env(safe-area-inset-top)) max(18px, env(safe-area-inset-right)) 8px max(18px, env(safe-area-inset-left)); display: grid; grid-template-columns: 1fr auto 1fr; align-items: center; overflow: visible; background: linear-gradient(#181714f0, transparent); pointer-events: none; }
+.topbar { position: absolute; z-index: 12; top: 0; left: 0; right: 0; height: calc(72px + env(safe-area-inset-top)); padding: calc(10px + env(safe-area-inset-top)) max(18px, env(safe-area-inset-right)) 8px max(18px, env(safe-area-inset-left)); display: flex; justify-content: space-between; align-items: center; overflow: visible; background: linear-gradient(#181714f0, transparent); pointer-events: none; }
 .brand { font-size: 1.08rem; letter-spacing: -.04em; text-shadow: 1px 2px 0 #000; transform: rotate(-2deg); }
 .brand em { color: var(--orange); font-style: normal; }
-.mode-button { position: relative; z-index: 13; display: block; min-width: 118px; min-height: 42px; padding: 5px 10px 6px; border: 1px solid #fff8; border-radius: 13px 11px 14px 12px; background: #171512ed; color: #fff8df; line-height: 1.08; text-align: center; opacity: 1; visibility: visible; box-shadow: 2px 3px 0 #0005; pointer-events: auto; }
-.mode-button strong, .mode-button small { display: block; }
-.mode-button strong { font-size: .69rem; }
-.mode-button small { margin-top: 3px; font-size: .56rem; opacity: .8; }
+.mode-button { position: relative; z-index: 10; justify-self: start; display: block; width: min(27vw, 108px); min-width: 94px; min-height: 42px; padding: 7px 7px 6px; border: 1px solid #fff8; border-radius: 13px 11px 14px 12px; background: #171512ed; color: #fff8df; line-height: 1.08; text-align: center; opacity: 1; visibility: visible; box-shadow: 2px 3px 0 #0005; pointer-events: auto; }
+.mode-button strong { display: inline; font-size: .69rem; }
+.mode-button small { display: none; }
 .mode-button::before { content: ""; display: inline-block; width: 6px; height: 6px; margin: 0 5px 1px 0; border-radius: 50%; background: #7dc9bf; box-shadow: 0 0 0 2px #7dc9bf33; }
 .mode-button.checking::before { background: #f5c84c; }
 .mode-button.basic::before { background: #fff4ce99; }
@@ -77,7 +76,7 @@ button:focus-visible { outline: 4px solid var(--mint); outline-offset: 3px; }
 
 @media (orientation: landscape) and (max-height: 600px) {
   .topbar { height: calc(52px + env(safe-area-inset-top)); }
-  .mode-button { padding: 3px 9px 4px; }
+  .mode-button { width: min(18vw, 110px); padding: 5px 7px; }
   .camera-controls { bottom: calc(env(safe-area-inset-bottom) + 44px); min-height: 88px; padding-bottom: 8px; }
   .shutter { width: 66px; height: 66px; }
   .result-sheet { align-items: center; padding: max(8px, env(safe-area-inset-top)) max(12px, env(safe-area-inset-right)) max(8px, env(safe-area-inset-bottom)) max(12px, env(safe-area-inset-left)); }
@@ -90,6 +89,6 @@ button:focus-visible { outline: 4px solid var(--mint); outline-offset: 3px; }
   .permission-panel { flex-direction: row; gap: 26px; text-align: left; }
   .permission-panel h1 { font-size: 1.8rem; }
   .permission-panel p { margin-bottom: 12px; }
-  .zoom-control { top: auto; bottom: calc(30px + env(safe-area-inset-bottom)); left: max(14px, env(safe-area-inset-left)); width: min(32vw, 240px); transform: rotate(-1deg); }
+  .zoom-control { top: calc(58px + env(safe-area-inset-top)); bottom: auto; left: 50%; width: min(36vw, 250px); transform: translateX(-50%) rotate(-1deg); }
 }
 @media (prefers-reduced-motion: reduce) { * { transition: none !important; } .status.processing .spinner { animation-duration: 1.8s; } }
