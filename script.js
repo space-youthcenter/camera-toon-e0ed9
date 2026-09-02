@@ -488,7 +488,7 @@
     targetCtx.textAlign = "center";
     targetCtx.textBaseline = "middle";
     targetCtx.font = "900 " + Math.round(w * (landscape ? .018 : .025)) + "px Arial Rounded MT Bold, Arial";
-    targetCtx.fillText("TOON!", 0, 0);
+    targetCtx.fillText("CAMERA", 0, 0);
     targetCtx.restore();
     targetCtx.restore();
   }
@@ -593,7 +593,7 @@
     cropCanvas.height = Math.max(2, Math.round(screen.h * cropScale));
     cropCtx.drawImage(capturedCanvas, screen.x, screen.y, screen.w, screen.h, 0, 0, cropCanvas.width, cropCanvas.height);
 
-    showStatus("손그림으로 바꾸는 중…");
+    showStatus("손그림 변환 중…");
     setTimeout(function () {
       createResult(frame, screen);
     }, 30);
