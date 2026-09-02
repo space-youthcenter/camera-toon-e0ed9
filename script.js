@@ -168,7 +168,7 @@
       var next = cameraDevices[(current + 1 + cameraDevices.length) % cameraDevices.length];
       selectedDeviceId = next.deviceId;
       facingMode = /front|user|전면/i.test(next.label || "") ? "user" : "environment";
-      showToast((next.label || "다른 카메라") + "로 바꾸는 중…");
+      showToast("다른 카메라로 바꾸는 중…");
       startCamera(next.deviceId);
       return;
     }
@@ -561,7 +561,9 @@
     var ratio = frameReady && frameImage.naturalWidth ? frameImage.naturalWidth / frameImage.naturalHeight : fallbackRatio;
     var w = maxW, h = w / ratio;
     if (h > maxH) { h = maxH; w = h * ratio; }
-    return { x: (width - w) / 2, y: (height - h) * (landscape ? .42 : .46), w: w, h: h };
+    var y = (height - h) * (landscape ? .42 : .46);
+    if (landscape) y = Math.max(y, h * .15);
+    return { x: (width - w) / 2, y: y, w: w, h: h };
   }
 
   function getScreenRect(frame) {
