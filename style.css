@@ -18,6 +18,10 @@ button { font: inherit; color: inherit; touch-action: manipulation; }
 .live-badge { display: flex; align-items: center; gap: 6px; padding: 5px 8px; border: 1px solid #fff8; border-radius: 99px; background: #1118; font-size: .62rem; letter-spacing: .12em; }
 .live-badge i { width: 7px; height: 7px; border-radius: 50%; background: #ff615e; box-shadow: 0 0 0 3px #ff615e33; }
 .icon-button { width: 40px; height: 40px; padding: 0; border: 2px solid #fff; border-radius: 50%; background: #1118; font-size: 1.45rem; pointer-events: auto; }
+.zoom-control { position: absolute; z-index: 5; top: calc(66px + env(safe-area-inset-top)); left: 50%; transform: translateX(-50%) rotate(-1deg); display: flex; align-items: center; gap: 8px; width: min(68vw, 280px); padding: 6px 10px; border: 2px solid #342f2a; border-radius: 13px 10px 14px 11px; background: #fff3d9e8; color: #342f2a; box-shadow: 3px 4px 0 #1714118c; font-size: .7rem; font-weight: 900; }
+.zoom-control[hidden] { display: none; }
+.zoom-control span { min-width: 34px; text-align: center; }
+.zoom-control input { width: 100%; accent-color: var(--orange); }
 .stage { position: absolute; inset: 0; overflow: hidden; background: #171614; }
 #cameraVideo { position: absolute; width: 1px; height: 1px; opacity: 0; pointer-events: none; }
 #liveCanvas { display: block; width: 100%; height: 100%; }
@@ -69,5 +73,6 @@ button:focus-visible { outline: 4px solid var(--mint); outline-offset: 3px; }
   .permission-panel { flex-direction: row; gap: 26px; text-align: left; }
   .permission-panel h1 { font-size: 1.8rem; }
   .permission-panel p { margin-bottom: 12px; }
+  .zoom-control { top: calc(12px + env(safe-area-inset-top)); width: min(34vw, 250px); }
 }
 @media (prefers-reduced-motion: reduce) { * { transition: none !important; } }
