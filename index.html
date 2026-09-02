@@ -8,14 +8,14 @@
     <meta http-equiv="Pragma" content="no-cache" />
     <meta name="description" content="종이 카메라로 찍으면 화면 속만 색연필 그림이 되는 놀이 카메라" />
     <title>Camera Toon — 종이 색연필 카메라</title>
-    <link rel="stylesheet" href="style.css?v=9" />
+    <link rel="stylesheet" href="style.css?v=10" />
   </head>
   <body>
     <main class="camera-app">
       <header class="topbar">
         <div class="brand"><b>Camera</b> <em>Toon</em></div>
         <div class="live-badge"><i></i> LIVE</div>
-        <button id="flipButton" class="icon-button" type="button" aria-label="앞뒤 카메라 전환" hidden>↻</button>
+        <button id="flipButton" class="icon-button" type="button" aria-label="다른 카메라 렌즈로 전환" hidden>↻</button>
       </header>
 
       <section id="stage" class="stage" aria-label="실시간 카메라 미리보기">
@@ -31,6 +31,11 @@
         </div>
 
         <div class="status" id="status" role="status" aria-live="polite">카메라를 준비하고 있어요…</div>
+
+        <label id="zoomControl" class="zoom-control" hidden>
+          <span id="zoomLabel">1.0×</span>
+          <input id="zoomRange" type="range" min="1" max="2.5" step="0.1" value="1" aria-label="카메라 줌" />
+        </label>
 
         <div class="camera-controls" id="cameraControls" hidden>
           <span class="control-spacer"></span>
@@ -54,6 +59,6 @@
 
     <div id="toast" class="toast" role="status" aria-live="polite"></div>
     <img id="frameImage" src="assets/frame-camera.png" alt="" hidden />
-    <script src="script.js?v=9"></script>
+    <script src="script.js?v=10"></script>
   </body>
 </html>
