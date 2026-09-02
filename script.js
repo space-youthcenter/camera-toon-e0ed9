@@ -19,6 +19,9 @@
   var saveButton = document.getElementById("saveButton");
   var status = document.getElementById("status");
   var toast = document.getElementById("toast");
+  var zoomControl = document.getElementById("zoomControl");
+  var zoomRange = document.getElementById("zoomRange");
+  var zoomLabel = document.getElementById("zoomLabel");
 
   var stream = null;
   var facingMode = "environment";
@@ -27,6 +30,12 @@
   var animationId = 0;
   var resizeTimer = 0;
   var aiEnabled = false;
+  var cameraDevices = [];
+  var selectedDeviceId = "";
+  var activeTrack = null;
+  var nativeZoom = false;
+  var digitalZoom = 1;
+  var autoSelectedWide = false;
   var lowCanvas = document.createElement("canvas");
   var lowCtx = lowCanvas.getContext("2d", { willReadFrequently: true }) || lowCanvas.getContext("2d");
   var capturedCanvas = document.createElement("canvas");
@@ -39,10 +48,8 @@
   detectAIMode();
 
   startButton.addEventListener("click", function () { startCamera(); });
-  flipButton.addEventListener("click", function () {
-    facingMode = facingMode === "environment" ? "user" : "environment";
-    startCamera();
-  });
+  flipButton.addEventListener("click", cycleCamera);
+  zoomRange.addEventListener("input", applyZoom);
   shutterButton.addEventListener("click", capturePhoto);
   closeResult.addEventListener("click", closeResultSheet);
   retakeButton.addEventListener("click", closeResultSheet);
@@ -59,7 +66,7 @@
     else if (running) animationId = requestAnimationFrame(renderLoop);
   });
 
-  function startCamera() {
+  async function startCamera(deviceId) {
     if (!ctx || !resultCtx || !lowCtx || !capturedCtx || !cropCtx) {
       showError("이 기기에서 카메라 화면을 준비하지 못했어요. Safari를 완전히 닫았다가 다시 열어 주세요.");
       return;
@@ -70,33 +77,51 @@
     }
     stopCamera();
     showStatus("카메라를 깨우고 있어요…");
-    navigator.mediaDevices.getUserMedia({
-      audio: false,
-      video: {
-        facingMode: { ideal: facingMode },
-        width: { ideal: 1280 },
-        height: { ideal: 1920 }
-      }
-    }).then(function (mediaStream) {
+    var videoConstraints = {
+      facingMode: { ideal: facingMode },
+      width: { ideal: 1920 },
+      height: { ideal: 1080 },
+      aspectRatio: { ideal: 16 / 9 }
+    };
+    if (deviceId || selectedDeviceId) {
+      videoConstraints.deviceId = { exact: deviceId || selectedDeviceId };
+      delete videoConstraints.facingMode;
+    }
+    try {
+      var mediaStream = await navigator.mediaDevices.getUserMedia({ audio: false, video: videoConstraints });
       stream = mediaStream;
+      activeTrack = stream.getVideoTracks()[0] || null;
+      var settings = activeTrack && activeTrack.getSettings ? activeTrack.getSettings() : {};
+      if (settings.deviceId) selectedDeviceId = settings.deviceId;
       video.srcObject = stream;
       video.setAttribute("playsinline", "");
       video.muted = true;
-      return video.play();
-    }).then(function () {
+      await video.play();
+      await refreshCameraDevices();
+      if (!autoSelectedWide && facingMode === "environment") {
+        autoSelectedWide = true;
+        var preferred = findPreferredRearCamera();
+        if (preferred && preferred.deviceId && preferred.deviceId !== selectedDeviceId) {
+          selectedDeviceId = preferred.deviceId;
+          await startCamera(preferred.deviceId);
+          return;
+        }
+      }
+      configureZoom();
       resizeCanvas();
       permissionPanel.classList.add("hidden");
       cameraControls.hidden = false;
       flipButton.hidden = false;
+      zoomControl.hidden = false;
       hideStatus();
       running = true;
       animationId = requestAnimationFrame(renderLoop);
-    }).catch(function (error) {
+    } catch (error) {
       var message = error && (error.name === "NotAllowedError" || error.name === "SecurityError")
         ? "카메라 권한이 필요해요. Safari 설정에서 이 사이트의 카메라를 허용해 주세요."
         : "카메라를 시작하지 못했어요. 다른 앱이 카메라를 사용 중인지 확인해 주세요.";
       showError(message);
-    });
+    }
   }
 
   function stopCamera() {
@@ -106,6 +131,86 @@
       stream.getTracks().forEach(function (track) { track.stop(); });
       stream = null;
     }
+    activeTrack = null;
+  }
+
+  async function refreshCameraDevices() {
+    try {
+      var devices = await navigator.mediaDevices.enumerateDevices();
+      cameraDevices = devices.filter(function (device) { return device.kind === "videoinput"; });
+      cameraDevices.sort(function (a, b) { return cameraScore(b) - cameraScore(a); });
+    } catch (error) {
+      cameraDevices = [];
+    }
+  }
+
+  function cameraScore(device) {
+    var label = (device.label || "").toLowerCase();
+    var score = 0;
+    if (/ultra|0\.5|초광각|울트라/.test(label)) score += 100;
+    if (/wide|광각/.test(label) && !/tele|망원/.test(label)) score += 60;
+    if (/back|rear|environment|후면/.test(label)) score += 40;
+    if (/tele|망원/.test(label)) score -= 80;
+    if (/front|user|전면/.test(label)) score -= 120;
+    return score;
+  }
+
+  function findPreferredRearCamera() {
+    for (var i = 0; i < cameraDevices.length; i++) {
+      if (cameraScore(cameraDevices[i]) > 0) return cameraDevices[i];
+    }
+    return cameraDevices[0] || null;
+  }
+
+  function cycleCamera() {
+    if (cameraDevices.length > 1) {
+      var current = cameraDevices.findIndex(function (device) { return device.deviceId === selectedDeviceId; });
+      var next = cameraDevices[(current + 1 + cameraDevices.length) % cameraDevices.length];
+      selectedDeviceId = next.deviceId;
+      facingMode = /front|user|전면/i.test(next.label || "") ? "user" : "environment";
+      showToast((next.label || "다른 카메라") + "로 바꾸는 중…");
+      startCamera(next.deviceId);
+      return;
+    }
+    selectedDeviceId = "";
+    facingMode = facingMode === "environment" ? "user" : "environment";
+    startCamera();
+  }
+
+  function configureZoom() {
+    nativeZoom = false;
+    digitalZoom = 1;
+    var capabilities = activeTrack && activeTrack.getCapabilities ? activeTrack.getCapabilities() : {};
+    if (capabilities.zoom && typeof capabilities.zoom.min === "number") {
+      nativeZoom = true;
+      zoomRange.min = capabilities.zoom.min;
+      zoomRange.max = capabilities.zoom.max;
+      zoomRange.step = capabilities.zoom.step || .1;
+      zoomRange.value = capabilities.zoom.min;
+    } else {
+      zoomRange.min = 1;
+      zoomRange.max = 2.5;
+      zoomRange.step = .1;
+      zoomRange.value = 1;
+    }
+    updateZoomLabel();
+  }
+
+  function applyZoom() {
+    var value = Number(zoomRange.value) || 1;
+    if (nativeZoom && activeTrack && activeTrack.applyConstraints) {
+      activeTrack.applyConstraints({ advanced: [{ zoom: value }] }).catch(function () {
+        nativeZoom = false;
+        digitalZoom = Math.max(1, value);
+      });
+    } else {
+      digitalZoom = Math.max(1, value);
+    }
+    updateZoomLabel();
+  }
+
+  function updateZoomLabel() {
+    zoomLabel.textContent = (Number(zoomRange.value) || 1).toFixed(1) + "×";
   }
 
   function resizeCanvas() {
@@ -141,6 +246,7 @@
 
   function drawCurrentVideo(targetCtx, width, height) {
     var source = coverCrop(video.videoWidth, video.videoHeight, width, height);
+    source = applyDigitalZoom(source);
     targetCtx.save();
     if (facingMode === "user") {
       targetCtx.translate(width, 0);
@@ -149,6 +255,13 @@
     targetCtx.drawImage(video, source.x, source.y, source.w, source.h, 0, 0, width, height);
     targetCtx.restore();
     return source;
+  }
+
+  function applyDigitalZoom(source) {
+    if (nativeZoom || digitalZoom <= 1) return source;
+    var w = source.w / digitalZoom;
+    var h = source.h / digitalZoom;
+    return { x: source.x + (source.w - w) / 2, y: source.y + (source.h - h) / 2, w: w, h: h };
   }
 
   function applyPencilSketch(pixels, width, height) {
@@ -233,6 +346,7 @@
     }
     var line = Math.max(5, frame.w * .014);
     var x = frame.x, y = frame.y, w = frame.w, h = frame.h;
+    var landscape = w / h > 1.42;
     targetCtx.save();
     targetCtx.lineJoin = "round";
     targetCtx.lineCap = "round";
@@ -329,25 +443,52 @@
 
     // 장식 스티커와 작은 구멍들이 공작품 느낌을 더합니다.
     drawStar(targetCtx, x + w * .085, y + h * .18, w * .043, "#f5c84c", line * .42);
-    drawHeart(targetCtx, x + w * .915, y + h * .74, w * .043, "#ef7890", line * .42);
+    drawHeart(targetCtx, x + w * (landscape ? .91 : .925), y + h * (landscape ? .67 : .82), w * .038, "#ef7890", line * .42);
     targetCtx.fillStyle = "#79c9bd";
     targetCtx.strokeStyle = "#2f2924";
     targetCtx.lineWidth = line * .55;
     targetCtx.beginPath();
-    targetCtx.arc(x + w * .092, y + h * .81, w * .027, 0, Math.PI * 2);
+    targetCtx.arc(x + w * (landscape ? .91 : .095), y + h * (landscape ? .82 : .89), w * .027, 0, Math.PI * 2);
     targetCtx.fill(); targetCtx.stroke();
 
-    // 손으로 쓴 라벨과 마스킹테이프.
+    // MENU / OK 종이 버튼과 손으로 쓴 라벨.
+    targetCtx.fillStyle = "#fffdf2";
+    targetCtx.strokeStyle = "#342f2a";
+    targetCtx.lineWidth = line * .48;
+    if (landscape) {
+      roundedRect(targetCtx, x + w * .84, y + h * .34, w * .105, h * .105, line);
+      targetCtx.fill(); targetCtx.stroke();
+      targetCtx.beginPath();
+      targetCtx.arc(x + w * .892, y + h * .54, w * .043, 0, Math.PI * 2);
+      targetCtx.fill(); targetCtx.stroke();
+      targetCtx.fillStyle = "#342f2a";
+      targetCtx.textAlign = "center"; targetCtx.textBaseline = "middle";
+      targetCtx.font = "900 " + Math.round(w * .025) + "px Arial Rounded MT Bold, Arial";
+      targetCtx.fillText("MENU", x + w * .892, y + h * .392);
+      targetCtx.fillText("OK", x + w * .892, y + h * .54);
+    } else {
+      roundedRect(targetCtx, x + w * .18, y + h * .875, w * .19, h * .07, line);
+      targetCtx.fill(); targetCtx.stroke();
+      targetCtx.beginPath();
+      targetCtx.arc(x + w * .77, y + h * .91, w * .038, 0, Math.PI * 2);
+      targetCtx.fill(); targetCtx.stroke();
+      targetCtx.fillStyle = "#342f2a";
+      targetCtx.textAlign = "center"; targetCtx.textBaseline = "middle";
+      targetCtx.font = "900 " + Math.round(w * .03) + "px Arial Rounded MT Bold, Arial";
+      targetCtx.fillText("MENU", x + w * .275, y + h * .91);
+      targetCtx.fillText("OK", x + w * .77, y + h * .91);
+    }
+
     targetCtx.save();
-    targetCtx.translate(x + w * .5, y + h * .86);
+    targetCtx.translate(x + w * (landscape ? .89 : .52), y + h * .91);
     targetCtx.rotate(-.025);
     targetCtx.fillStyle = "rgba(244,126,88,.62)";
-    targetCtx.fillRect(-w * .19, -h * .065, w * .38, h * .12);
+    targetCtx.fillRect(-w * (landscape ? .07 : .11), -h * .03, w * (landscape ? .14 : .22), h * .06);
     targetCtx.fillStyle = "#342f2a";
     targetCtx.textAlign = "center";
     targetCtx.textBaseline = "middle";
-    targetCtx.font = "900 " + Math.round(w * .052) + "px Arial Rounded MT Bold, Arial";
-    targetCtx.fillText("CAMERA TOON!", 0, 0);
+    targetCtx.font = "900 " + Math.round(w * (landscape ? .018 : .025)) + "px Arial Rounded MT Bold, Arial";
+    targetCtx.fillText("TOON!", 0, 0);
     targetCtx.restore();
     targetCtx.restore();
   }
@@ -414,21 +555,22 @@
 
   function getFrameRect(width, height) {
     var landscape = width > height;
-    var maxW = width * (landscape ? .78 : .92);
-    var maxH = height * (landscape ? .68 : .62);
-    var fallbackRatio = landscape ? 2 : 1.32;
+    var maxW = width * (landscape ? .88 : .92);
+    var maxH = height * (landscape ? .76 : .68);
+    var fallbackRatio = landscape ? 1.68 : 1.08;
     var ratio = frameReady && frameImage.naturalWidth ? frameImage.naturalWidth / frameImage.naturalHeight : fallbackRatio;
     var w = maxW, h = w / ratio;
     if (h > maxH) { h = maxH; w = h * ratio; }
-    return { x: (width - w) / 2, y: (height - h) * (landscape ? .38 : .46), w: w, h: h };
+    return { x: (width - w) / 2, y: (height - h) * (landscape ? .42 : .46), w: w, h: h };
   }
 
   function getScreenRect(frame) {
+    var landscape = frame.w / frame.h > 1.42;
     return {
-      x: Math.round(frame.x + frame.w * .11),
-      y: Math.round(frame.y + frame.h * .17),
-      w: Math.round(frame.w * .78),
-      h: Math.round(frame.h * .64)
+      x: Math.round(frame.x + frame.w * .075),
+      y: Math.round(frame.y + frame.h * (landscape ? .16 : .145)),
+      w: Math.round(frame.w * (landscape ? .72 : .85)),
+      h: Math.round(frame.h * (landscape ? .66 : .70))
     };
   }
 
@@ -451,7 +593,7 @@
     cropCanvas.height = Math.max(2, Math.round(screen.h * cropScale));
     cropCtx.drawImage(capturedCanvas, screen.x, screen.y, screen.w, screen.h, 0, 0, cropCanvas.width, cropCanvas.height);
 
-    showStatus(aiEnabled ? "AI가 색연필 그림을 그리고 있어요…" : "기기 안에서 색연필 그림을 그리고 있어요…");
+    showStatus("손그림으로 바꾸는 중…");
     setTimeout(function () {
       createResult(frame, screen);
     }, 30);
@@ -459,11 +601,13 @@
 
   async function createResult(frame, screen) {
     var transformed;
+    var aiFailed = false;
     if (aiEnabled) {
       try {
         transformed = await transformWithAI(cropCanvas);
       } catch (error) {
         aiEnabled = false;
+        aiFailed = true;
         transformed = createCanvasFallback(cropCanvas);
       }
     } else {
@@ -477,6 +621,7 @@
     resultSheet.setAttribute("aria-hidden", "false");
     hideStatus();
     shutterButton.disabled = false;
+    if (aiFailed) showToast("AI 변환에 실패해서 기본 효과로 저장했어요.");
   }
 
   // 무료 모드가 기본입니다. 서버가 AI 키 설정을 명시적으로 알려줄 때만 사진 crop을 전송합니다.
