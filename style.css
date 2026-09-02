@@ -72,6 +72,6 @@ button:focus-visible { outline: 4px solid var(--mint); outline-offset: 3px; }
   .permission-panel { flex-direction: row; gap: 26px; text-align: left; }
   .permission-panel h1 { font-size: 1.8rem; }
   .permission-panel p { margin-bottom: 12px; }
-  .zoom-control { top: calc(12px + env(safe-area-inset-top)); width: min(34vw, 250px); }
+  .zoom-control { top: auto; bottom: calc(14px + env(safe-area-inset-bottom)); left: max(14px, env(safe-area-inset-left)); width: min(32vw, 240px); transform: rotate(-1deg); }
 }
 @media (prefers-reduced-motion: reduce) { * { transition: none !important; } }
