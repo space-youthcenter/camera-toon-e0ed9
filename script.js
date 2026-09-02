@@ -46,6 +46,7 @@
   var digitalZoom = 1;
   var autoSelectedWide = false;
   var processingCapture = false;
+  var AI_CROP_MAX_SIDE = 896;
   var lowCanvas = document.createElement("canvas");
   var lowCtx = lowCanvas.getContext("2d", { willReadFrequently: true }) || lowCanvas.getContext("2d");
   var capturedCanvas = document.createElement("canvas");
@@ -358,6 +359,7 @@
 
   function drawPaperFrame(targetCtx, frame, screen, source, fullW, fullH, pencilRegion) {
     if (frameReady) {
+      if (pencilRegion) targetCtx.drawImage(pencilRegion, screen.x, screen.y, screen.w, screen.h);
       targetCtx.drawImage(frameImage, frame.x, frame.y, frame.w, frame.h);
       return;
     }
@@ -595,6 +597,7 @@
 
   function capturePhoto() {
     if (!running || processingCapture || video.readyState < 2) return;
+    var timing = { captureStarted: nowMs() };
     processingCapture = true;
     setCaptureControlsDisabled(true);
     cancelAnimationFrame(animationId);
@@ -609,10 +612,14 @@
 
     var frame = getFrameRect(resultCanvas.width, resultCanvas.height);
     var screen = getScreenRect(frame);
-    var cropScale = Math.min(1, 1024 / Math.max(screen.w, screen.h));
+    var cropScale = Math.min(1, AI_CROP_MAX_SIDE / Math.max(screen.w, screen.h));
     cropCanvas.width = Math.max(2, Math.round(screen.w * cropScale));
     cropCanvas.height = Math.max(2, Math.round(screen.h * cropScale));
     cropCtx.drawImage(capturedCanvas, screen.x, screen.y, screen.w, screen.h, 0, 0, cropCanvas.width, cropCanvas.height);
+    timing.cropReady = nowMs();
+    timing.cropWidth = cropCanvas.width;
+    timing.cropHeight = cropCanvas.height;
+    console.info("[Camera Toon timing] 촬영 → crop", Math.round(timing.cropReady - timing.captureStarted) + "ms", cropCanvas.width + "x" + cropCanvas.height);
 
     // 셔터 순간 확정된 이 한 장만 화면에 고정하고 API crop에도 재사용합니다.
     frozenCanvas.width = canvas.width;
@@ -625,18 +632,18 @@
 
     showProcessingStatus();
     setTimeout(function () {
-      createResult(frame, screen);
+      createResult(frame, screen, timing);
     }, 30);
   }
 
-  async function createResult(frame, screen) {
+  async function createResult(frame, screen, timing) {
     var transformed;
     var aiFailed = false;
     var usedAI = false;
     try {
       if (selectedMode === "ai" && aiEnabled) {
         try {
-          transformed = await transformWithAI(cropCanvas);
+          transformed = await transformWithAI(cropCanvas, timing);
           usedAI = true;
         } catch (error) {
           aiEnabled = false;
@@ -650,13 +657,16 @@
       }
 
       resultCtx.drawImage(capturedCanvas, 0, 0, resultCanvas.width, resultCanvas.height);
-      resultCtx.drawImage(transformed, screen.x, screen.y, screen.w, screen.h);
       drawPaperFrame(resultCtx, frame, screen, null, resultCanvas.width, resultCanvas.height, transformed);
       resultMode.textContent = usedAI ? "AI 손그림 변환 완료" : "기본 손그림 효과로 변환했어요";
       resultSheet.classList.add("open");
       resultSheet.setAttribute("aria-hidden", "false");
+      timing.compositeComplete = nowMs();
+      logTimingSummary(timing, usedAI);
       if (aiFailed) showToast("AI 변환에 실패해서 기본 효과로 저장했어요.");
     } catch (error) {
+      timing.compositeComplete = nowMs();
+      logTimingSummary(timing, false);
       showToast("결과를 만들지 못했어요. 다시 촬영해 주세요.");
       stage.classList.remove("is-frozen");
       if (running) animationId = requestAnimationFrame(renderLoop);
@@ -726,31 +736,55 @@
     if (aiCheckPending) {
       modeName.textContent = "AI 손그림";
       connectionStatus.textContent = "AI 확인 중...";
+      modeButton.setAttribute("aria-label", "AI 확인 중, 촬영 처리 모드 변경");
       return;
     }
     if (selectedMode === "ai" && aiEnabled) {
       modeName.textContent = "AI 손그림";
       connectionStatus.textContent = "AI 연결됨";
+      modeButton.setAttribute("aria-label", "현재 AI 손그림 모드, 기본 모드로 변경");
       return;
     }
     modeName.textContent = "기본 모드";
     connectionStatus.textContent = aiEnabled ? "AI 연결됨 · 전환 가능" : "기본 모드";
+    modeButton.setAttribute("aria-label", aiEnabled ? "현재 기본 모드, AI 손그림 모드로 변경" : "현재 기본 모드, AI 사용 불가");
   }
 
   // 이미지 제공자를 바꿀 때 이 함수의 내부 구현만 교체하면 됩니다.
-  async function transformWithAI(sourceCanvas) {
-    var blob = await canvasToBlob(sourceCanvas, "image/jpeg", .9);
-    var imageData = await blobToDataURL(blob);
-    var response = await fetch("/api/transform", {
+  async function transformWithAI(sourceCanvas, timing) {
+    var blob = await canvasToBlob(sourceCanvas, "image/jpeg", .86);
+    timing.apiStarted = nowMs();
+    var endpoint = "/api/transform?width=" + sourceCanvas.width + "&height=" + sourceCanvas.height;
+    var response = await fetch(endpoint, {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ image: imageData, width: sourceCanvas.width, height: sourceCanvas.height })
+      headers: { "Content-Type": "image/jpeg" },
+      body: blob
     });
-    if (!response.ok) throw new Error("AI transform failed");
     var payload = await response.json();
+    timing.apiCompleted = nowMs();
+    timing.serverOpenAIMs = payload && payload.timing ? payload.timing.openaiMs : null;
+    console.info("[Camera Toon timing] /api/transform 요청 → 응답", Math.round(timing.apiCompleted - timing.apiStarted) + "ms", timing.serverOpenAIMs == null ? "" : "OpenAI " + timing.serverOpenAIMs + "ms");
+    if (!response.ok) throw new Error("AI transform failed");
     if (!payload.image) throw new Error("AI image missing");
-    return loadImageToCanvas(payload.image, sourceCanvas.width, sourceCanvas.height);
+    return loadImage(payload.image);
   }
+
+  function logTimingSummary(timing, usedAI) {
+    var compositeStart = timing.apiCompleted || timing.cropReady;
+    var summary = {
+      mode: usedAI ? "ai" : "basic",
+      crop: timing.cropWidth + "x" + timing.cropHeight,
+      captureToCropMs: Math.round(timing.cropReady - timing.captureStarted),
+      apiRequestMs: timing.apiStarted && timing.apiCompleted ? Math.round(timing.apiCompleted - timing.apiStarted) : 0,
+      serverOpenAIMs: timing.serverOpenAIMs == null ? null : Math.round(timing.serverOpenAIMs),
+      responseToCompositeMs: Math.round(timing.compositeComplete - compositeStart),
+      totalMs: Math.round(timing.compositeComplete - timing.captureStarted)
+    };
+    console.info("[Camera Toon timing] OpenAI 응답 → 최종 합성", summary.responseToCompositeMs + "ms");
+    console.info("[Camera Toon timing] 전체 변환", summary.totalMs + "ms", summary);
+  }
+
+  function nowMs() { return typeof performance !== "undefined" && performance.now ? performance.now() : Date.now(); }
 
   function createCanvasFallback(sourceCanvas) {
     lowCanvas.width = sourceCanvas.width;
@@ -811,32 +845,13 @@
     });
   }
 
-  function blobToDataURL(blob) {
-    return new Promise(function (resolve, reject) {
-      var reader = new FileReader();
-      reader.onload = function () { resolve(reader.result); };
-      reader.onerror = reject;
-      reader.readAsDataURL(blob);
-    });
-  }
-
-  function loadImageToCanvas(dataURL, width, height) {
+  function loadImage(dataURL) {
     return new Promise(function (resolve, reject) {
       var image = new Image();
-      image.onload = function () {
-        var output = document.createElement("canvas");
-        output.width = width; output.height = height;
-        drawImageCover(output.getContext("2d"), image, width, height);
-        resolve(output);
-      };
+      image.onload = function () { resolve(image); };
       image.onerror = reject;
       image.src = dataURL;
     });
-  }
-
-  function drawImageCover(context, image, width, height) {
-    var crop = coverCrop(image.naturalWidth, image.naturalHeight, width, height);
-    context.drawImage(image, crop.x, crop.y, crop.w, crop.h, 0, 0, width, height);
   }
 
   function closeResultSheet() {
