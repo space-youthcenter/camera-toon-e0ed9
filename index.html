@@ -8,16 +8,12 @@
     <meta http-equiv="Pragma" content="no-cache" />
     <meta name="description" content="종이 카메라로 찍으면 화면 속만 색연필 그림이 되는 놀이 카메라" />
     <title>Camera Toon</title>
-    <link rel="stylesheet" href="style.css?v=16" />
+    <link rel="stylesheet" href="style.css?v=17" />
   </head>
   <body>
     <main class="camera-app">
       <header class="topbar">
         <div class="brand"><b>Camera</b> <em>Toon</em></div>
-        <button id="modeButton" class="mode-button checking" type="button" aria-label="촬영 처리 모드 변경">
-          <strong id="modeName">AI 손그림</strong>
-          <small id="connectionStatus">AI 확인 중...</small>
-        </button>
         <button id="flipButton" class="icon-button" type="button" aria-label="다른 카메라 렌즈로 전환" hidden>↻</button>
       </header>
 
@@ -42,7 +38,10 @@
         </label>
 
         <div class="camera-controls" id="cameraControls" hidden>
-          <span class="control-spacer"></span>
+          <button id="modeButton" class="mode-button checking" type="button" aria-label="촬영 처리 모드 변경">
+            <strong id="modeName">AI 손그림</strong>
+            <small id="connectionStatus">AI 확인 중...</small>
+          </button>
           <button id="shutterButton" class="shutter" type="button" aria-label="사진 촬영"><i></i></button>
           <span class="control-spacer" aria-hidden="true"></span>
         </div>
@@ -64,6 +63,6 @@
 
     <div id="toast" class="toast" role="status" aria-live="polite"></div>
     <img id="frameImage" src="assets/frame-camera.png" alt="" hidden />
-    <script src="script.js?v=16"></script>
+    <script src="script.js?v=17"></script>
   </body>
 </html>
