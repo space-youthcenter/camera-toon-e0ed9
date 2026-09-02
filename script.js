@@ -217,37 +217,51 @@
     nativeZoom = false;
     digitalZoom = 1;
     var capabilities = activeTrack && activeTrack.getCapabilities ? activeTrack.getCapabilities() : {};
-    if (capabilities.zoom && typeof capabilities.zoom.min === "number") {
+    if (capabilities.zoom && typeof capabilities.zoom.min === "number" &&
+        typeof capabilities.zoom.max === "number" && capabilities.zoom.max >= 1 &&
+        activeTrack && activeTrack.applyConstraints) {
+      var nativeMin = Math.max(1, capabilities.zoom.min);
+      var nativeMax = Math.min(4, capabilities.zoom.max);
       nativeZoom = true;
-      zoomRange.min = capabilities.zoom.min;
-      zoomRange.max = capabilities.zoom.max;
+      zoomRange.min = nativeMin;
+      zoomRange.max = Math.max(nativeMin, nativeMax);
       zoomRange.step = capabilities.zoom.step || .1;
-      zoomRange.value = capabilities.zoom.min;
+      zoomRange.value = nativeMin;
+      activeTrack.applyConstraints({ advanced: [{ zoom: nativeMin }] }).catch(function () {
+        configureDigitalZoom(1);
+      });
     } else {
-      zoomRange.min = 1;
-      zoomRange.max = 2.5;
-      zoomRange.step = .1;
-      zoomRange.value = 1;
+      configureDigitalZoom(1);
     }
+    updateZoomLabel();
+  }
+
+  function configureDigitalZoom(value) {
+    nativeZoom = false;
+    digitalZoom = Math.min(4, Math.max(1, Number(value) || 1));
+    zoomRange.min = 1;
+    zoomRange.max = 4;
+    zoomRange.step = .1;
+    zoomRange.value = digitalZoom;
     updateZoomLabel();
   }
 
   function applyZoom() {
     if (processingCapture) return;
-    var value = Number(zoomRange.value) || 1;
+    var value = Math.min(4, Math.max(1, Number(zoomRange.value) || 1));
+    zoomRange.value = value;
     if (nativeZoom && activeTrack && activeTrack.applyConstraints) {
       activeTrack.applyConstraints({ advanced: [{ zoom: value }] }).catch(function () {
-        nativeZoom = false;
-        digitalZoom = Math.max(1, value);
+        configureDigitalZoom(value);
       });
     } else {
-      digitalZoom = Math.max(1, value);
+      digitalZoom = value;
     }
     updateZoomLabel();
   }
 
   function updateZoomLabel() {
-    zoomLabel.textContent = (Number(zoomRange.value) || 1).toFixed(1) + "×";
+    zoomLabel.textContent = Math.min(4, Math.max(1, Number(zoomRange.value) || 1)).toFixed(1) + "×";
   }
 
   function resizeCanvas() {
