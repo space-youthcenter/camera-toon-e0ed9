@@ -59,7 +59,7 @@
   detectAIMode();
 
   startButton.addEventListener("click", function () { startCamera(); });
-  flipButton.addEventListener("click", cycleCamera);
+  flipButton.addEventListener("click", toggleCameraFacing);
   zoomRange.addEventListener("input", applyZoom);
   shutterButton.addEventListener("click", capturePhoto);
   modeButton.addEventListener("click", toggleProcessingMode);
@@ -105,6 +105,7 @@
       activeTrack = stream.getVideoTracks()[0] || null;
       var settings = activeTrack && activeTrack.getSettings ? activeTrack.getSettings() : {};
       if (settings.deviceId) selectedDeviceId = settings.deviceId;
+      if (settings.facingMode === "user" || settings.facingMode === "environment") facingMode = settings.facingMode;
       video.srcObject = stream;
       video.setAttribute("playsinline", "");
       video.muted = true;
@@ -124,6 +125,7 @@
       permissionPanel.classList.add("hidden");
       cameraControls.hidden = false;
       flipButton.hidden = false;
+      updateFlipButton();
       zoomControl.hidden = false;
       hideStatus();
       running = true;
@@ -169,25 +171,46 @@
 
   function findPreferredRearCamera() {
     for (var i = 0; i < cameraDevices.length; i++) {
-      if (cameraScore(cameraDevices[i]) > 0) return cameraDevices[i];
+      if (isRearCamera(cameraDevices[i]) && cameraScore(cameraDevices[i]) > 0) return cameraDevices[i];
     }
-    return cameraDevices[0] || null;
+    for (var j = 0; j < cameraDevices.length; j++) {
+      if (isRearCamera(cameraDevices[j])) return cameraDevices[j];
+    }
+    return null;
   }
 
-  function cycleCamera() {
-    if (processingCapture) return;
-    if (cameraDevices.length > 1) {
-      var current = cameraDevices.findIndex(function (device) { return device.deviceId === selectedDeviceId; });
-      var next = cameraDevices[(current + 1 + cameraDevices.length) % cameraDevices.length];
-      selectedDeviceId = next.deviceId;
-      facingMode = /front|user|전면/i.test(next.label || "") ? "user" : "environment";
-      showToast("다른 카메라로 바꾸는 중…");
-      startCamera(next.deviceId);
-      return;
+  function findCameraForFacing(mode) {
+    for (var i = 0; i < cameraDevices.length; i++) {
+      if (mode === "user" ? isFrontCamera(cameraDevices[i]) : isRearCamera(cameraDevices[i])) return cameraDevices[i];
     }
-    selectedDeviceId = "";
+    return null;
+  }
+
+  function isFrontCamera(device) {
+    return /front|user|facetime|전면|셀피|selfie/i.test(device.label || "");
+  }
+
+  function isRearCamera(device) {
+    var label = device.label || "";
+    return /back|rear|environment|후면|초광각|광각|ultra|wide|tele|망원/i.test(label) && !isFrontCamera(device);
+  }
+
+  async function toggleCameraFacing() {
+    if (processingCapture) return;
     facingMode = facingMode === "environment" ? "user" : "environment";
-    startCamera();
+    selectedDeviceId = "";
+    autoSelectedWide = facingMode === "user";
+    updateFlipButton();
+    showToast(facingMode === "user" ? "전면 카메라로 바꾸는 중…" : "후면 카메라로 바꾸는 중…");
+    await refreshCameraDevices();
+    var matchingDevice = findCameraForFacing(facingMode);
+    startCamera(matchingDevice && matchingDevice.deviceId ? matchingDevice.deviceId : undefined);
+  }
+
+  function updateFlipButton() {
+    var nextName = facingMode === "environment" ? "전면" : "후면";
+    flipButton.setAttribute("aria-label", nextName + " 카메라로 전환");
+    flipButton.title = nextName + " 카메라로 전환";
   }
 
   function configureZoom() {
