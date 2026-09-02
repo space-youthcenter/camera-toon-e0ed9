@@ -22,7 +22,7 @@
 
 ## 기본 무료 모드와 선택형 AI 변환
 
-Camera Toon의 기본 모드는 무료입니다. 촬영 후 종이 카메라 안쪽 영역에 검은 펜선, 거친 색연필 해칭, 종이결과 불균일한 채색을 브라우저 canvas로 적용합니다. 사진은 기기 밖으로 전송되지 않습니다.
+Camera Toon의 기본 모드는 무료입니다. 촬영 후 종이 카메라 안쪽 영역에 검은 펜선, 거친 색연필 해칭, 종이결과 불균일한 채색을 브라우저 canvas로 적용합니다. 사진은 기기 밖으로 전송되지 않습니다. 사용자 화면에는 별도의 필터 이름을 상시 표시하지 않으며 앱 이름은 `Camera Toon`으로 통일합니다.
 
 OpenAI AI 변환은 선택 기능입니다. Netlify 서버에 `OPENAI_API_KEY`가 설정된 경우에만 촬영된 전체 사진이 아닌 종이 카메라 내부 화면 crop을 함수로 전송합니다. AI 설정이 없거나 호출이 실패하면 오류 메시지를 반복해서 띄우지 않고 무료 Paper Toon 필터를 사용합니다.
 
@@ -65,7 +65,7 @@ AI 변환을 사용하지 않는다면 아래 환경 변수 단계는 건너뛰�
 
 `https://YOUR-NETLIFY-SITE-NAME.netlify.app/`
 
-이 주소에서 카메라 촬영을 완료한 뒤 결과 생성 상태에 **AI Paper Toon**이 표시되는지 확인합니다. API 주소는 `https://YOUR-NETLIFY-SITE-NAME.netlify.app/api/transform`이지만 POST 전용이므로 주소창에서 직접 여는 방식이 아니라 앱에서 촬영하여 테스트해야 합니다.
+이 주소에서 Camera Toon 앱을 열고 직접 촬영하여 AI 변환 여부를 확인합니다. API 주소는 `https://YOUR-NETLIFY-SITE-NAME.netlify.app/api/transform`이지만 POST 전용이므로 주소창에서 직접 여는 방식이 아니라 앱에서 촬영하여 테스트해야 합니다.
 
 AI 변환이 실패하면 결과는 자동으로 **브라우저 Paper Toon** fallback으로 생성됩니다. 이때 Netlify의 **Logs → Functions → transform-image** 로그에서 API 키, 결제 한도, 모델 접근 권한 또는 요청 오류를 확인할 수 있습니다.
 
