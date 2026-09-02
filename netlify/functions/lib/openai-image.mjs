@@ -9,6 +9,9 @@ export async function transformWithOpenAI(imageBuffer, mimeType, width, height) 
   form.append("image[]", new Blob([imageBuffer], { type: mimeType }), "camera-toon-crop.jpg");
   form.append("prompt", PAPER_TOON_PROMPT);
   form.append("size", chooseImageSize(width, height));
+  form.append("quality", normalizeQuality(process.env.OPENAI_IMAGE_QUALITY));
+  form.append("output_format", "jpeg");
+  form.append("output_compression", "82");
 
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), 55000);
@@ -32,8 +35,23 @@ export async function transformWithOpenAI(imageBuffer, mimeType, width, height) 
   }
 }
 
-function chooseImageSize(width, height) {
-  if (width > height * 1.15) return "1536x1024";
-  if (height > width * 1.15) return "1024x1536";
-  return "1024x1024";
+export function chooseImageSize(width, height) {
+  const safeWidth = Math.max(1, Number(width) || 1);
+  const safeHeight = Math.max(1, Number(height) || 1);
+  const ratio = Math.min(3, Math.max(1 / 3, safeWidth / safeHeight));
+  let outputWidth = ratio >= 1 ? 1024 : 1024 * ratio;
+  let outputHeight = ratio >= 1 ? 1024 / ratio : 1024;
+  const minimumPixels = 655360;
+  if (outputWidth * outputHeight < minimumPixels) {
+    const scale = Math.sqrt(minimumPixels / (outputWidth * outputHeight));
+    outputWidth *= scale;
+    outputHeight *= scale;
+  }
+  outputWidth = Math.ceil(outputWidth / 16) * 16;
+  outputHeight = Math.ceil(outputHeight / 16) * 16;
+  return `${outputWidth}x${outputHeight}`;
+}
+
+export function normalizeQuality(value) {
+  return ["low", "medium", "high"].includes(value) ? value : "low";
 }
