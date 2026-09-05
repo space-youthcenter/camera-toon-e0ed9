@@ -45,11 +45,27 @@ button { font: inherit; color: inherit; touch-action: manipulation; }
 .start-button:active { transform: translate(3px,3px); box-shadow: 2px 3px 0 #0009; }
 .status { position: absolute; z-index: 10; left: 50%; top: 47%; transform: translate(-50%,-50%); width: max-content; max-width: calc(100% - 40px); padding: 9px 13px; border-radius: 12px; background: #111c; font-size: .78rem; text-align: center; opacity: 0; transition: opacity .2s; pointer-events: none; }
 .status.show { opacity: 1; }
-.status.processing { top: 50%; min-width: min(290px, calc(100% - 40px)); padding: 18px 20px; border: 2px solid #fff5d5aa; border-radius: 18px 15px 20px 16px; background: #171411e8; box-shadow: 4px 6px 0 #0006; }
-.status.processing .spinner { display: block; width: 30px; height: 30px; margin: 0 auto 10px; border: 4px solid #fff4ce55; border-top-color: var(--orange); border-radius: 50%; animation: status-spin .8s linear infinite; }
-.status.processing strong { display: block; font-size: .95rem; }
-.status.processing small { display: block; margin-top: 6px; color: #fff4ced0; font-size: .72rem; }
-@keyframes status-spin { to { transform: rotate(360deg); } }
+.status.processing { top: calc(142px + env(safe-area-inset-top)); min-width: min(276px, calc(100% - 40px)); padding: 10px 14px 11px; border: 2px solid #342f2acc; border-radius: 16px 13px 18px 14px; background: #fff4cedd; color: var(--ink); box-shadow: 4px 6px 0 #0005; backdrop-filter: blur(3px); -webkit-backdrop-filter: blur(3px); }
+.toon-progress { display: flex; align-items: center; gap: 10px; }
+.toon-progress svg { flex: 0 0 72px; width: 72px; height: 44px; overflow: visible; }
+.toon-progress-copy { min-width: 0; text-align: left; }
+.status.processing strong { display: block; font-size: .78rem; line-height: 1.3; }
+.status.processing small { display: block; margin-top: 3px; color: #342f2ab8; font-size: .62rem; }
+.toon-paper { fill: #fffdf1; stroke: #342f2a; stroke-width: 3; }
+.toon-line { fill: none; stroke: #342f2a; stroke-width: 3.2; stroke-linecap: round; stroke-dasharray: 78; animation: toon-draw 2.1s ease-in-out infinite; }
+.toon-color { fill: none; stroke: #f47e58; stroke-width: 8; stroke-linecap: round; stroke-dasharray: 9 7; opacity: .82; animation: toon-color 1.15s linear infinite; }
+.toon-pencil { transform-origin: 48px 21px; animation: toon-pencil 1.15s ease-in-out infinite alternate; }
+.toon-pencil-body { fill: #f5c84c; stroke: #342f2a; stroke-width: 2.8; }
+.toon-pencil-tip { fill: #f0d2a0; stroke: #342f2a; stroke-width: 2.4; }
+.toon-spark { fill: #f47e58; opacity: 0; animation: toon-spark 1.8s ease-in-out infinite; }
+.toon-spark.second { fill: #7dc9bf; animation-delay: .6s; }
+.status.processing[data-phase="outline"] .toon-color { opacity: .25; }
+.status.processing[data-phase="color"] .toon-color { opacity: 1; }
+.status.processing[data-phase="complete"] .toon-pencil { animation: none; transform: rotate(-10deg) translateX(5px); }
+@keyframes toon-draw { 0% { stroke-dashoffset: 78; } 60%,100% { stroke-dashoffset: 0; } }
+@keyframes toon-color { to { stroke-dashoffset: -32; } }
+@keyframes toon-pencil { from { transform: translate(-5px,3px) rotate(-7deg); } to { transform: translate(7px,-2px) rotate(5deg); } }
+@keyframes toon-spark { 0%,35%,100% { opacity: 0; transform: scale(.4); } 55%,75% { opacity: 1; transform: scale(1); } }
 .camera-controls { position: absolute; z-index: 9; left: 0; right: 0; bottom: calc(env(safe-area-inset-bottom) + 72px); min-height: 118px; padding: 15px 24px 22px; display: grid; grid-template-columns: 1fr 92px 1fr; align-items: center; background: linear-gradient(transparent, #12110fcf 37%); }
 .control-spacer { width: 56px; }
 .shutter { justify-self: center; width: 80px; height: 80px; padding: 7px; border: 4px solid #fff; border-radius: 50%; background: transparent; box-shadow: 0 3px 14px #0009; cursor: pointer; }
@@ -90,5 +106,6 @@ button:focus-visible { outline: 4px solid var(--mint); outline-offset: 3px; }
   .permission-panel h1 { font-size: 1.8rem; }
   .permission-panel p { margin-bottom: 12px; }
   .zoom-control { top: calc(58px + env(safe-area-inset-top)); bottom: auto; left: 50%; width: min(36vw, 250px); transform: translateX(-50%) rotate(-1deg); }
+  .status.processing { top: calc(58px + env(safe-area-inset-top)); left: auto; right: max(14px, env(safe-area-inset-right)); transform: rotate(1deg); min-width: min(250px, 31vw); }
 }
-@media (prefers-reduced-motion: reduce) { * { transition: none !important; } .status.processing .spinner { animation-duration: 1.8s; } }
+@media (prefers-reduced-motion: reduce) { * { transition: none !important; } .toon-line, .toon-color, .toon-pencil, .toon-spark { animation-duration: 3s; } }

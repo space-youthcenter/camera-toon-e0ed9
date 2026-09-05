@@ -46,6 +46,8 @@
   var digitalZoom = 1;
   var autoSelectedWide = false;
   var processingCapture = false;
+  var processingMessageTimers = [];
+  var processingMessageInterval = 0;
   var AI_CROP_MAX_SIDE = 896;
   var lowCanvas = document.createElement("canvas");
   var lowCtx = lowCanvas.getContext("2d", { willReadFrequently: true }) || lowCanvas.getContext("2d");
@@ -667,7 +669,7 @@
     drawPaperFrame(frozenCtx, frozenFrame, frozenScreen, null, frozenCanvas.width, frozenCanvas.height, cropCanvas);
     stage.classList.add("is-frozen");
 
-    showProcessingStatus();
+    showProcessingStatus(selectedMode === "ai" && aiEnabled);
     setTimeout(function () {
       createResult(frame, screen, timing);
     }, 30);
@@ -695,11 +697,13 @@
 
       resultCtx.drawImage(capturedCanvas, 0, 0, resultCanvas.width, resultCanvas.height);
       drawPaperFrame(resultCtx, frame, screen, null, resultCanvas.width, resultCanvas.height, transformed);
-      resultMode.textContent = usedAI ? "AI 손그림 변환 완료" : "기본 손그림 효과로 변환했어요";
-      resultSheet.classList.add("open");
-      resultSheet.setAttribute("aria-hidden", "false");
+      resultMode.textContent = usedAI ? "AI 손그림 변환 완료" : (aiFailed ? "기본 손그림 효과로 완성했어요." : "기본 손그림 효과로 변환했어요");
       timing.compositeComplete = nowMs();
       logTimingSummary(timing, usedAI);
+      showProcessingComplete(aiFailed ? "기본 손그림 효과로 완성했어요." : "완성!");
+      await waitForPaint();
+      resultSheet.classList.add("open");
+      resultSheet.setAttribute("aria-hidden", "false");
       if (aiFailed) showToast("AI 변환에 실패해서 기본 효과로 저장했어요.");
     } catch (error) {
       timing.compositeComplete = nowMs();
@@ -942,12 +946,47 @@
     zoomRange.disabled = disabled;
     modeButton.disabled = disabled;
   }
-  function showStatus(message) { status.classList.remove("processing"); status.textContent = message; status.classList.add("show"); }
-  function showProcessingStatus() {
+  function showStatus(message) { clearProcessingSequence(); status.classList.remove("processing"); status.textContent = message; status.classList.add("show"); }
+  function showProcessingStatus(useAI) {
+    clearProcessingSequence();
     status.classList.add("processing", "show");
-    status.innerHTML = '<i class="spinner" aria-hidden="true"></i><strong>손그림으로 바꾸는 중...</strong><small>사진 촬영은 완료됐어요.</small>';
+    status.dataset.phase = useAI ? "captured" : "basic";
+    status.innerHTML = '<div class="toon-progress"><svg viewBox="0 0 82 50" aria-hidden="true"><path class="toon-paper" d="M5 7 Q7 3 13 5 L65 4 Q70 5 68 11 L70 41 Q68 46 62 44 L11 46 Q5 44 7 38 Z"/><path class="toon-color" d="M17 32 Q28 27 39 32 T61 30"/><path class="toon-line" d="M15 34 Q22 16 34 25 Q43 8 57 27 Q62 32 64 35"/><g class="toon-pencil"><path class="toon-pencil-body" d="M42 10 L68 30 L62 37 L36 16 Z"/><path class="toon-pencil-tip" d="M36 16 L30 10 L42 10 Z"/></g><circle class="toon-spark" cx="72" cy="10" r="3"/><circle class="toon-spark second" cx="77" cy="20" r="2.5"/></svg><div class="toon-progress-copy"><strong id="processingMessage">' + (useAI ? '사진 촬영 완료!' : '손그림 만드는 중...') + '</strong><small>사진 촬영은 완료됐어요.</small></div></div>';
+    if (!useAI) return;
+    queueProcessingMessage(1200, "검은 펜으로 윤곽선을 그리고 있어요...", "outline");
+    queueProcessingMessage(4300, "색연필로 슥슥 칠하는 중...", "color");
+    queueProcessingMessage(7600, "조금만 기다리면 완성!", "finishing");
+    queueProcessingMessage(10600, "색연필로 마무리하는 중...", "color");
+    processingMessageTimers.push(setTimeout(function () {
+      var alternate = false;
+      processingMessageInterval = setInterval(function () {
+        alternate = !alternate;
+        updateProcessingMessage(alternate ? "조금만 기다리면 완성!" : "색연필로 마무리하는 중...", alternate ? "finishing" : "color");
+      }, 3000);
+    }, 13600));
   }
-  function hideStatus() { status.classList.remove("show", "processing"); }
+  function queueProcessingMessage(delay, message, phase) {
+    processingMessageTimers.push(setTimeout(function () { updateProcessingMessage(message, phase); }, delay));
+  }
+  function updateProcessingMessage(message, phase) {
+    var messageNode = document.getElementById("processingMessage");
+    if (messageNode) messageNode.textContent = message;
+    status.dataset.phase = phase;
+  }
+  function showProcessingComplete(message) {
+    clearProcessingSequence();
+    updateProcessingMessage(message, "complete");
+  }
+  function clearProcessingSequence() {
+    processingMessageTimers.forEach(clearTimeout);
+    processingMessageTimers = [];
+    clearInterval(processingMessageInterval);
+    processingMessageInterval = 0;
+  }
+  function waitForPaint() {
+    return new Promise(function (resolve) { requestAnimationFrame(resolve); });
+  }
+  function hideStatus() { clearProcessingSequence(); status.classList.remove("show", "processing"); delete status.dataset.phase; }
   function showError(message) { hideStatus(); permissionMessage.textContent = message; startButton.textContent = "다시 시도"; permissionPanel.classList.remove("hidden"); }
   var toastTimer;
   function showToast(message) { toast.textContent = message; toast.classList.add("show"); clearTimeout(toastTimer); toastTimer = setTimeout(function () { toast.classList.remove("show"); }, 2500); }
